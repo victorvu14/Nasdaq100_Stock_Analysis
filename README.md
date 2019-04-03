@@ -1,6 +1,6 @@
 # Nasdaq100_Stock_Analysis
 
-# Scope 
+### Scope 
 
 - Analyze relationship between the average daily return and the volatility (sd), for each symbol.
 
@@ -8,9 +8,9 @@
 
 - Create a clustering of companies, using the mean and sd of daily returns as the spliting variables. 
 
-# Task Performed 
+### Task Performed 
 
-1 . Import Data From Yahoo Finance using getSymbols function. Within the For loop, we use the daily return function to calculate the return per day of the stock.
+1. Import Data From Yahoo Finance using getSymbols function. Within the For loop, we use the daily return function to calculate the return per day of the stock.
 
 2. Calculate correlation between daily return and volatility 
 
