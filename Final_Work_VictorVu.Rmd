@@ -1,0 +1,201 @@
+---
+title: "Risk & Returns Analysis Using Nasdaq100"
+output: html_document
+---
+## Background
+####The NASDAQ-100 is a stock market index made up of 103 equity securities issued by 100 of the largest non-financial companies listed on the NASDAQ. It is a modified capitalization-weighted index. The stocks' weights in the index are based on their market capitalizations, with certain rules capping the influence of the largest components. It is based on exchange, and it is not an index of U.S.-based companies. It does not have any financial companies, since these were put in a separate index.
+
+## Introduction
+
+#####The objective of this report is to explore the correlation between daily stock returns and volatility of the Nasdaq-100. From the understanding of correlation, the report aims to provide a basic cluster analysis and finalises with portfolio recommendation based on Sharp Ratio. This report is seperated into 5 main parts: 
+#####  1. Package & Data Importation 
+#####  2. Calculation
+#####  3. Correlation Analysis 
+#####  4. Cluster Analysis
+#####  5. Portfolio Exploration
+
+
+##1.A. Packages Installation
+
+##### The quantmod package is designed to assist the quantitative trader in the development, testing, and deployment of statistically based trading models. In this case, we will use Quantmod to download stock prices from Yahoo Finance and calculate daily return of the stock.
+
+##### Readxl assist in reading the excel file
+
+##### NbClust & factoextra help find out the optimal number of clusters 
+
+##### Plotly & ggplot are for plotting purpose
+
+```{r}
+if(!"quantmod" %in% installed.packages()) {
+  install.packages("quantmod")
+} else {
+  print('quantmod package already installed')
+}
+library(quantmod)
+
+
+if(!"readxl" %in% installed.packages()) {
+  install.packages("readxl")
+} else {
+  print('readxl package already installed')
+}
+library(readxl)
+
+if(!"NbClust" %in% installed.packages()) {
+  install.packages("NbClust")
+} else {
+  print('NbClust package already installed')
+}
+library(NbClust)
+
+if(!"factoextra" %in% installed.packages()) {
+  install.packages("factoextra")
+} else {
+  print('factoextra package already installed')
+}
+library(factoextra)
+
+if(!"plotly" %in% installed.packages()) {
+  install.packages("plotly")
+} else {
+  print('plotly package already installed')
+}
+library(plotly)
+
+if(!"ggplot2" %in% installed.packages()) {
+  install.packages("ggplot2")
+} else {
+  print('ggplot2 package already installed')
+}
+library(ggplot2)
+
+if(!"lubridate" %in% installed.packages()) {
+  install.packages("lubridate")
+} else {
+  print('lubridate package already installed')
+}
+library(lubridate) 
+```
+
+##1.B. Import Symbol Name 
+
+```{r}
+nasdaq_100 <- data.frame(read_excel("nasdaq_symbols.xlsx"))
+str(nasdaq_100)
+stocks <- (nasdaq_100$Symbol)
+```
+
+##1.C. Data Importation
+
+####Import Data From Yahoo Finance using getSymbols function. Within the For loop, we use the daily return function to calculate the return per day of the stock. 
+
+```{r}
+start <- Sys.Date() - 10000
+all_stocks <- NULL
+for (i in 1:length(stocks)){
+  dataset = getSymbols(stocks[i],from = start, to= now(), src="yahoo", auto.assign = F,
+                       warnings = FALSE, symbol.lookup = F)
+  daily_return <- dailyReturn(dataset)
+  all_stocks <- cbind(all_stocks,daily_return)
+}
+all_stocks <- as.data.frame(all_stocks)
+colnames(all_stocks) <- stocks
+head(all_stocks)
+```
+
+
+##2. Calculation
+
+
+####In order to explore the correlation between returns and volatility, we first need to identify the mean of average daily returns and the mean of average daily standard deviation for each company. From then we will have 103 pairs of mean daily returns and mean standard deviation, these will be use for correlation analysis.
+
+####Daily return of each stock is stored in the all_stocks dataframe. It is important to note that we collect 10,000 data points from Yahoo Finance. With this large amount of data, we will have a clear view of the correlation between risk and returns. The start year of this dataset is 1991. Also, some company has not gone public during then, until the company goes public these rows will be NAs. For example, Facebook went public on Friday, May 18, 2012, before this date, daily return of FB is NA.  
+
+#####Calculate Average Daily Return of each stock based on all the available daily returns
+
+```{r}
+stocks_average <- apply(all_stocks, 2 , mean, na.rm=TRUE)
+```
+
+#####Calculate Daily Standard Deviation based on all the available daily Standard Deviation
+
+```{r}
+stocks_sd <- apply(all_stocks, 2 , sd, na.rm=TRUE)
+```
+
+#####Combine daily return with daily standard deviation into one data frame. Then add an extra column of company name in order for plotting purpose.
+
+```{r}
+all_stocks_daily <-data.frame(cbind(stocks_average,stocks_sd))
+all_stocks_daily<-data.frame(rownames(all_stocks_daily), all_stocks_daily)
+names(all_stocks_daily)[1]<-"company"
+head(all_stocks_daily)
+str(all_stocks_daily)
+```
+
+##3. Correlation Analysis
+
+
+```{r}
+cor(stocks_average,stocks_sd)
+ggplot(all_stocks_daily, aes(x= all_stocks_daily$stocks_sd, y= all_stocks_daily$stocks_average)) + geom_point() +geom_smooth(method='lm') + labs(x = "Mean Daily SD") + labs(y = "Mean Daily Returns")
+```
+
+#####The correlation coefficient r measures the strength and direction of a linear relationship between two variables. cor = 0.7 shows a high positive uphill relationship between returns and volatility. This is sensible as company that generates high return is normally young and growing company, such company has high growth prospect however is very volatite in their business thus having high risk. 
+
+
+##4. Cluster Analysis
+
+#####Use Elbow Method to determine the optimal numnber of clusters. The Elbow method looks at the total WSS as a function of the number of clusters. The total WSS or within sum squared measures the compactness of each cluster and we want it to be as small as possible. In other words, we try to lower the intra-cluster variation. 
+
+```{r}
+fviz_nbclust(all_stocks_daily[,-1], kmeans, method = "wss") +
+  geom_vline(xintercept = 4, linetype = 2)+
+  labs(subtitle = "Elbow method")
+```
+
+#####The optimal number of cluster determined is 4 as adding another cluster doesn’t improve much better the total WSS. We move on to identify the cluster and demonstrate in visual analysis.
+
+
+#####Use K-mean to cluster companies base on standard deviation and mean returns 
+
+```{r}
+all_stocks_daily$cluster <- kmeans(all_stocks_daily[,2:ncol(all_stocks_daily)],centers=4)$cluster
+ggplot(all_stocks_daily, aes(x= all_stocks_daily$stocks_sd, y= all_stocks_daily$stocks_average, color = all_stocks_daily$cluster)) + geom_point() +labs(col="Cluster")+ labs(x = "Mean Daily SD") + labs(y = "Mean Daily Returns") + ggtitle("Clustering Graph")
+
+```
+
+####There are 4 clusters illustrated in the plot above differentiate base on different returns/volatility ratio.
+
+#### Green: Low Return - Lowest Volatility - We can name this group the conservatives
+
+#### Red: Average return - Average Volatility - We can name this group the risk averses
+
+#### Purple: Average return - High Volatility - This group can be named risk seekers
+
+#### Blue: Average High return - Highest Volatility - We can name this group the high performers 
+
+##5. Sharp Ratio Analysis
+
+####To understand the performance of each stoch, we calculate the the sharpe ratio. Sharpe ratio is the avarage return earned per unit of volatility. Company with higher Sharpe Ratio is a more attractive investment. In this case we assume the risk free rate is 0%. 
+
+```{r}
+all_stocks_daily$sharp_ratio <- all_stocks_daily$stocks_average/all_stocks_daily$stocks_sd
+all_stocks_daily <- all_stocks_daily[order(-all_stocks_daily$sharp_ratio),]
+all_stocks_daily[1:10,]
+top_stocks <- all_stocks_daily[1:10,]
+p <- ggplot(top_stocks, aes(x= top_stocks$stocks_sd, y= top_stocks$stocks_average, color=company)) + geom_point() + labs(x = "Mean Daily SD") + labs(y = "Mean Daily Returns") + ggtitle("Top 10 Stocks with Highest Sharp Ratio")
+ggplotly(p) 
+```
+
+####From the results above the most appealing investment are in companies with highest sharpe ratios. Positive sharpe ratio shows that every unit of volatily is compensate by positive increase in return of the company.
+
+
+##Conclusion 
+
+####From the analysis above, it is clear that there is a positive correlation between returns and volatility. The elbow method identifies 4 as the optimal number of clusters where the total within sum squared is minimised. K-means clustering yielded four different interesting clusters of companies: The conservatives with low returns and low volatility, the risk averses with average returns and average volatility, and the risk seekers with average high returns but high volatility and lastly the high performers with high volatility but high returns.
+
+####Further analysis of the Sharp Ratio reveals that many the best performers of the Nasdaq-100 are technology companies such as Netflix, Amazon, Paypal, Google. While being disruptive, these companies have very high growth prospect, and this is reflected in the increase in share price. 
+
+
+
